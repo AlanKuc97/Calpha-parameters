@@ -1,0 +1,167 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Math::Trig;
+use Data::Dumper qw(Dumper);
+
+#This program calculates distance between CA-CA,
+#angle between CA-CA-CA,
+#angle between CA-CA-CA-CA
+#How to run:
+#./pdbCAparameters 1i78.pdb 1i77.cif [2zyx.pdb ...]
+#Function for calculating distance
+sub calculateParameters($$@){
+    my $curFile = shift;
+    my $id = shift;
+    my @atm = @_;
+    my $distance;
+        #$atom[$j][0] - X coordinate
+        #$atom[$j][1] - Y coordinate
+        #$atom[$j][2] - Z coordinate
+        #$atom[$j][3] - Chain identifier
+        #$atom[$j][4] - Atom name
+        #$atom[$j][5] - Residue name
+        #$atom[$j][6] - Atom serial number
+        ####Finding distance
+    $distance =sqrt(($atm[1][0] - $atm[0][0])**2
+            + ($atm[1][1] - $atm[0][1])**2
+            + ($atm[1][2] - $atm[0][2])**2);
+    print "CACA ";
+    printf ("%.3f",$distance);
+        ####Finding angle
+    if(scalar(@atm) > 2){
+        my @AB = ($atm[0][0] - $atm[1][0],
+            $atm[0][1]-$atm[1][1],
+            $atm[0][2]-$atm[1][2]);
+        my @BC = ($atm[2][0]-$atm[1][0],
+            $atm[2][1]-$atm[1][1],
+            $atm[2][2]-$atm[1][2]);
+        my $up = $AB[0]*$BC[0] +
+            $AB[1]*$BC[1] +
+            $AB[2]*$BC[2];
+        my $low = sqrt($AB[0]**2+$AB[1]**2+$AB[2]**2) *
+                sqrt($BC[0]**2+$BC[1]**2+$BC[2]**2);
+        my $angle = 180 * acos($up / $low) /pi;
+        printf (" %.3f",$angle);
+    }else{
+        print " -";
+    }
+        ####Finding 2d angle
+    if(scalar(@atm) > 3){
+        my @AB = ($atm[0][0] - $atm[1][0],
+                $atm[0][1] - $atm[1][1],
+                $atm[0][2] - $atm[1][2]);
+        my @AC = ($atm[2][0] - $atm[1][0],
+                $atm[2][1] - $atm[1][1],
+                $atm[2][2] - $atm[1][2]);
+        my @n1 = ($AB[1]*$AC[2] - $AB[2] * $AC[1],
+                $AB[2]*$AC[0] - $AB[0] * $AC[2],
+                $AB[0]*$AC[1] - $AB[1] * $AC[0]);
+        my @BC = ($atm[1][0] - $atm[2][0],
+                 $atm[1][1] - $atm[2][1],
+                 $atm[1][2] - $atm[2][2]);
+        my @AD = ($atm[3][0] - $atm[2][0],
+                $atm[3][1] - $atm[2][1],
+                $atm[3][2] - $atm[2][2]);
+        my @n2 = ($BC[1]*$AD[2] - $BC[2] * $AD[1],
+                $BC[2]*$AD[0] - $BC[0] * $AD[2],
+                $BC[0]*$AD[1] - $BC[1] * $AD[0]);
+        my $up = $n1[0]*$n2[0] +
+                $n1[1]*$n2[1] +
+                $n1[2]*$n2[2];
+        my $low = sqrt($n1[0]**2+$n1[1]**2+$n1[2]**2) *
+                sqrt($n2[0]**2+$n2[1]**2+$n2[2]**2);
+        my @crosN = ($n1[1] * $n2[2] - $n1[2] * $n2[1],
+                     -($n1[0] * $n2[2] - $n1[2] * $n2[0]),
+                     $n1[0] * $n2[1] - $n1[1] * $n2[0]);
+        my $signProd = $crosN[0] * $AD[0] + 
+                     $crosN[1] * $AD[1] +
+                     $crosN[2] * $AD[2];
+        my $angle = 0;
+        if($signProd > 0){
+            $angle = 180 * acos($up / $low) /pi;
+        }else{
+            $angle = -180 * acos($up / $low) /pi;
+        }
+        printf (" %.3f",$angle);
+    }else{ 
+        print " -";
+    }
+    print " $id $atm[0][3] $atm[0][5] $atm[0][6] $curFile\n";
+}
+#Printing ID
+my $Id = '$Id:$';
+my $print_id = $Id;
+$print_id =~ s/\$//g;
+print "#",$print_id,"\n";
+#
+#Reading files from STDIN
+my $input_format;
+my $entryID;
+my @atom;
+my $currentFile = "";
+if(@ARGV){
+    $currentFile =$ARGV[0];
+}else{
+    $currentFile ="-";
+}
+while(<>){
+    if(!($currentFile eq $ARGV)){
+        if(scalar(@atom) == 4){
+            calculateParameters($currentFile,$entryID,@atom);
+            shift @atom;
+        }
+        if(scalar(@atom) == 3){
+            calculateParameters($currentFile,$entryID,@atom);
+            shift @atom;
+        }
+        if(scalar(@atom) == 2){
+            calculateParameters($currentFile,$entryID,@atom);
+        }
+        @atom = ();
+        $currentFile = $ARGV;
+    }
+    if(scalar(@atom) == 4){
+        calculateParameters($currentFile,$entryID,@atom);
+        shift @atom;
+        $currentFile = $ARGV;
+    }
+    chomp;
+    if(/^data_/){
+        $input_format = "PDBx";
+        my @tmpLine = split;
+        $entryID = @tmpLine[-4..-1];
+    }
+    if(/^_entry.id/){
+        $entryID = (split(' ',$_))[-1];
+    }
+    if(/^HEADER/){
+        $input_format ="PDB";
+        $entryID = substr($_,-18,4);
+    }
+    next if /^(REMARK|#|\s*$)/;
+    if(/^ATOM.*CA/){
+        if($input_format eq "PDBx"){
+            my @line = split;
+            push @{$atom[scalar(@atom)]}, @line[10..12],
+                $line[18],$line[3],$line[17],$line[1];
+        }elsif($input_format eq "PDB"){
+            push @{$atom[scalar(@atom)]}, substr($_,31,7),
+                substr($_,39,7),substr($_,47,7),
+                substr($_,21,1),substr($_,13,2),
+                substr($_,17,3),substr($_,7,4);
+        }
+    }
+}
+#Calculating everything for last time
+if(scalar(@atom) == 4){
+    calculateParameters($currentFile,$entryID,@atom);
+    shift @atom;
+}
+if(scalar(@atom) == 3){
+    calculateParameters($currentFile,$entryID,@atom);
+    shift @atom;
+}
+if(scalar(@atom) == 2){
+    calculateParameters($currentFile,$entryID,@atom);
+}
